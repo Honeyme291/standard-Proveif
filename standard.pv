@@ -1,0 +1,233 @@
+type element. (*element in finite field or group*)
+free Pub:channel.
+free Sec:channel [private].
+
+(*Name & Variables*)
+
+(*elment of group*)
+
+const P:element.
+free Ppub:element.
+free Smk:bitstring [private].
+
+(*User Sender*)
+(*public key of Sender*)
+free XS:element.
+free YS:element.
+
+(*private key of Sender*)
+
+free IDS:bitstring.
+free xs:bitstring [private].
+free ys:bitstring [private].
+free us:bitstring [private].
+
+
+(*User Receiver*)
+(*public key of Receiver*)
+free IDR:bitstring.
+free XR:element.
+free YR:element.
+
+(*private key of Receiver*)
+
+free xr:bitstring [private].
+free yr:bitstring [private].
+free ur:bitstring [private].
+
+(*Hash Function.*)
+
+fun H1(bitstring,element,element,element):bitstring.
+
+fun H2(bitstring,element):bitstring.
+
+fun H3(bitstring,bitstring,element,element,element,element,bitstring,element,element):bitstring.
+
+fun H4(bitstring,bitstring,element,element,element,element,bitstring,element,element):bitstring.
+
+fun H5(bitstring,bitstring,element,element,element,element,element,element):bitstring.
+
+(*function action.*)
+
+fun XOR(bitstring,bitstring):bitstring.
+
+fun ADD(bitstring,bitstring):bitstring.
+
+fun ADDElement(element,element):element.
+
+fun Mult(bitstring,bitstring):bitstring.(*multiple Zp*)
+
+fun MultInCurve(bitstring,element):element.(*aP*)
+
+fun Reverse(bitstring):bitstring.
+
+
+equation forall a:bitstring,b:bitstring;XOR(XOR(a,b),b)=a.
+
+
+(*Event*)
+
+event Senderbegin(bitstring).
+
+event Senderend(bitstring).
+
+event Receiverbegin(bitstring).
+
+event Receiverend(bitstring).
+
+query attacker(xs).
+query attacker(ys).
+query attacker(xr).
+query attacker(yr).
+query attacker(us).
+query attacker(ur).
+
+query id:bitstring;inj-event(Senderend(id)) ==>inj-event(Receiverbegin(id)).
+
+query id:bitstring;inj-event(Receiverend(id)) ==>inj-event(Receiverbegin(id)).
+
+(*Process*)
+
+(*KGC Process*)
+
+
+let SenderRegister = 
+			in(Sec,(IDS:bitstring,XS:element));
+			new us:bitstring;
+			let YS = MultInCurve(us,P) in
+			let ys = ADD(us,Mult(Smk,H1(IDS,XS,YS,Ppub))) in
+			out(Sec,(YS,ys));
+			0.
+			
+
+let ReceiveRegister = 
+			in(Sec,(IDR:bitstring,XR:element));
+			new ur:bitstring;
+			let YR = MultInCurve(ur,P) in
+			let yr = ADD(ur,Mult(Smk,H1(IDR,XR,YR,Ppub))) in
+			out(Sec,(YR,yr));
+			0.	
+			
+			
+let KGC=SenderRegister | ReceiveRegister.
+
+
+
+(*Sender Process*)
+
+let Sender = 
+	let XS = MultInCurve(xs,P) in
+	out(Sec,(IDS,XS));
+		
+	in(Sec,(YS:element,ys:bitstring));
+		
+	event Senderbegin(IDS);
+	
+	new ks:bitstring;
+	new ts:bitstring;
+	new MS:bitstring;
+	
+	let KS = MultInCurve(ks,P) in 
+	let TS = MultInCurve(ts,P) in
+	let h1R=H1(IDR,XR,YR,Ppub) in
+	let Q2S =ADDElement(XR,ADDElement(YR,MultInCurve(h1R,Ppub))) in
+	let Q1S = MultInCurve(ks,Q2S) in
+	let QS = ADDElement(Q1S,MultInCurve(ts,ADDElement(XR,MultInCurve(h1R,Ppub)))) in
+	let h5S =H5(IDS,IDR,XS,YS,XR,YR,KS,TS) in
+	let ZS = Reverse(ADD(xs,Mult(h5S,ys))) in
+	let h2S = H2(IDS,QS) in
+	let CS = XOR(MS,h2S) in
+	let h3S =H3(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in
+	let h4S =H4(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in
+	
+	let sigema = ADD(Mult(h3S,ts),ADD(Mult(h4S,xs),Mult(h5S,ys))) in
+	out(Pub,(CS,sigema,KS,TS));
+	
+	
+	
+	
+	in(Pub,(CR:bitstring,sigema':bitstring,KR:element,TR:element));
+	
+	let h1R = H1(IDR,XR,YR,Ppub) in
+	let h3R = H3(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in
+	let h4R = H4(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in
+	let h5R = H5(IDS,IDR,XS,YS,XR,YR,KS,TS) in
+	
+	if(MultInCurve(sigema,P)) = ADDElement(MultInCurve(h3R,TR),ADDElement(MultInCurve(h4R,XR),MultInCurve(h5R,ADDElement(YR,MultInCurve(h1R,Ppub))))) then
+	
+	let QR' = ADDElement(MultInCurve(ADD(xs,ys),KR),MultInCurve(ys,TR)) in
+	let h2R = H2(IDR,QR') in
+	let M' = XOR(CR,h2R) in 
+	
+	event Senderend(IDS)
+	else 0.
+	
+	
+	
+(*Sender Process*)
+let Receiver = 
+	let XR=MultInCurve(xr,P) in
+	out(Sec,(IDR,XR));
+	
+	
+	in(Sec,(YR:element,yr:bitstring));
+	
+	event Receiverbegin(IDR);
+	
+	let Xj=MultInCurve(xr,P) in
+	out(Sec,(IDR,XR));
+	
+	
+	in(Sec,(YR:element,yr:bitstring));
+	
+	event Receiverbegin(IDR);
+	
+	in(Pub,(CS:bitstring,sigema:bitstring,KS:element,TS:element));
+	
+	let h1S = H1(IDS,XS,YS,Ppub) in
+	let h3S' = H3(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in
+	let h4S' = H4(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in
+	let h5S' = H5(IDS,IDR,XS,YS,XR,YR,KS,TS) in
+	
+	if(MultInCurve(sigema,P)) = ADDElement(MultInCurve(h3S',TS),ADDElement(MultInCurve(h4S',XS),MultInCurve(h5S',ADDElement(YS,MultInCurve(h1S,Ppub))))) then
+	
+	let QS' = ADDElement(MultInCurve(ADD(xr,yr),KS),MultInCurve(yr,TS)) in
+	let h2S' = H2(IDS,QS') in
+	let MS' = XOR(CS,h2S') in 
+	
+	
+	new M:bitstring;
+	
+	new kr:bitstring;
+	new tr:bitstring;
+	
+	let KR = MultInCurve(kr,P) in 
+	let TR = MultInCurve(tr,P) in 
+	let h1S=H1(IDS,XS,YS,Ppub) in
+	
+	let QR = ADDElement(MultInCurve(kr,ADDElement(XS,ADDElement(YS,MultInCurve(h1S,Ppub)))),MultInCurve(tr,ADDElement(YS,MultInCurve(h1S,Ppub)))) in
+	let h2R =H2(IDR,QR) in 
+	let CR = XOR(M,h2R) in 
+	
+	let h3R = H3(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in 
+	let h4R = H4(IDS,IDR,XS,YS,XR,YR,CS,KS,TS) in 
+	let h5R = H5(IDS,IDR,XS,YS,XR,YR,KS,TS) in 
+	
+	let sigema' =  ADD(Mult(h3R,tr),ADD(Mult(h4R,xr),Mult(h5R,yr))) in
+	
+	out(Pub,(CR,sigema',KR,TR));
+	
+	event Receiverend(IDR)
+	else 0.
+	
+		
+				
+(*Process Replication*)
+
+process
+(!Sender | !Receiver | !KGC)
+
+
+
+
+
